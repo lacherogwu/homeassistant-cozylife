@@ -88,6 +88,7 @@ installs alongside that project rather than displacing it.
 
 ```
 custom_components/cozylife_cloud/
+  brand/          icon and logo, shipped with the integration (see below)
   api/            no Home Assistant imports — the wire protocol, testable alone
     protocol.py   frame encode/decode, shared by both transports
     wire.py       CRLF line framing over TCP
@@ -101,6 +102,27 @@ custom_components/cozylife_cloud/
   coordinator.py  polling and command dispatch
   switch.py       the switch entity
 ```
+
+## Branding
+
+Since Home Assistant 2026.3 a custom integration ships its own brand images
+in a `brand/` directory, and those take priority over the brands CDN. No
+pull request to `home-assistant/brands` is needed, and it works on a
+private repository.
+
+The mark is CozyLife's own, carried over from the
+`polaralias/homeassistant-cozylife` integration's assets — the one thing
+this project does reuse from it, since a made-up glyph would only make the
+integration harder to recognise in a list. It is CozyLife's trademark,
+neither ours nor that project's to license; using a vendor's mark to
+identify an integration that talks to that vendor's devices is nominative
+use, and is what the entire Home Assistant brands catalogue does.
+
+`scripts/make_brand_assets.py` regenerates the set from
+`scripts/assets/cozylife-mark-512.png`, sampling the wordmark colour from
+the mark so the lockup stays consistent if the source art changes. No dark
+variants are shipped: a white mark on saturated blue, and a blue wordmark,
+both hold up on light and dark backgrounds.
 
 ## Development
 

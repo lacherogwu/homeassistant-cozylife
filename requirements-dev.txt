@@ -4,3 +4,7 @@
 pytest
 pytest-homeassistant-custom-component
 ruff
+
+# Only needed to regenerate the brand images (scripts/make_brand_assets.py);
+# the generated PNGs are committed, so this is not needed to run the tests.
+pillow
