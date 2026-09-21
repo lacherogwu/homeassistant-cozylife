@@ -303,3 +303,148 @@ async def test_discovery_broadcasts_on_every_interface(hass: HomeAssistant):
 
     assert seen["targets"], "discovery was given no broadcast targets"
     assert "255.255.255.255" in seen["targets"]
+
+
+# --- reconfigure -----------------------------------------------------------
+#
+# A device's control key changes if it is re-paired in the CozyLife app, and
+# its relay endpoint can be reassigned. Without this, the only recovery is
+# deleting the entry and adding it again -- losing the entity id, and with it
+# every dashboard and automation referring to it.
+
+RECONFIGURE_DATA = {
+    CONF_DEVICE_ID: SOCKET.device_id,
+    CONF_DEVICE_KEY: "stale-key",
+    CONF_RELAY_HOST: "203.0.113.99",
+    CONF_RELAY_PORT: 8899,
+    CONF_LOCAL_IP: "192.0.2.9",
+    "device_name": SOCKET.name,
+}
+
+
+def existing_entry(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=RECONFIGURE_DATA,
+        title=SOCKET.name,
+        unique_id=SOCKET.device_id,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def start_reconfigure(hass, entry):
+    return await entry.start_reconfigure_flow(hass)
+
+
+async def test_reconfigure_asks_for_the_account_again(hass: HomeAssistant):
+    entry = existing_entry(hass)
+
+    result = await start_reconfigure(hass, entry)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+
+async def test_reconfigure_refreshes_the_key_and_relay(hass: HomeAssistant):
+    entry = existing_entry(hass)
+    account = cloud()
+    try:
+        with found_at("192.0.2.77"), patch(
+            "custom_components.cozylife_cloud.async_setup_entry", return_value=True
+        ):
+            result = await start_reconfigure(hass, entry)
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], CREDENTIALS
+            )
+    finally:
+        account.stop()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_DEVICE_KEY] == SOCKET.device_key
+    assert entry.data[CONF_RELAY_HOST] == SOCKET.relay_host
+    assert entry.data[CONF_RELAY_PORT] == SOCKET.relay_port
+    assert entry.data[CONF_LOCAL_IP] == "192.0.2.77"
+
+
+async def test_reconfigure_keeps_the_same_entry(hass: HomeAssistant):
+    """The whole point: the entity id, and everything referring to it,
+    survives."""
+
+    entry = existing_entry(hass)
+    account = cloud()
+    try:
+        with found_at(), patch(
+            "custom_components.cozylife_cloud.async_setup_entry", return_value=True
+        ):
+            result = await start_reconfigure(hass, entry)
+            await hass.config_entries.flow.async_configure(
+                result["flow_id"], CREDENTIALS
+            )
+    finally:
+        account.stop()
+
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+async def test_reconfigure_reports_a_rejected_password(hass: HomeAssistant):
+    entry = existing_entry(hass)
+    account = cloud(login_error=AuthError("rejected"))
+    try:
+        result = await start_reconfigure(hass, entry)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], CREDENTIALS
+        )
+    finally:
+        account.stop()
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert entry.data[CONF_DEVICE_KEY] == "stale-key"  # left untouched
+
+
+async def test_reconfigure_says_so_when_the_device_left_the_account(
+    hass: HomeAssistant,
+):
+    """Signing in with a different account, or after removing the device,
+    should say what is wrong rather than silently rewriting the entry to
+    point at someone else's socket."""
+
+    entry = existing_entry(hass)
+    account = cloud(devices=(LAMP,))
+    try:
+        result = await start_reconfigure(hass, entry)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], CREDENTIALS
+        )
+    finally:
+        account.stop()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "device_not_found"
+
+
+async def test_reconfigure_keeps_the_old_address_if_discovery_fails(
+    hass: HomeAssistant,
+):
+    """A device that is merely switched off should not lose its known
+    address as a side effect of refreshing its key."""
+
+    entry = existing_entry(hass)
+    account = cloud()
+    try:
+        with patch(
+            "custom_components.cozylife_cloud.config_flow.find_device_ip",
+            return_value=None,
+        ), patch(
+            "custom_components.cozylife_cloud.async_setup_entry", return_value=True
+        ):
+            result = await start_reconfigure(hass, entry)
+            await hass.config_entries.flow.async_configure(
+                result["flow_id"], CREDENTIALS
+            )
+    finally:
+        account.stop()
+
+    assert entry.data[CONF_LOCAL_IP] == "192.0.2.9"

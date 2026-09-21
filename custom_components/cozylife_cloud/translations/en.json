@@ -21,6 +21,14 @@
         "data": {
           "local_ip": "IP address"
         }
+      },
+      "reconfigure": {
+        "title": "Refresh device credentials",
+        "description": "Sign in again to refresh {device}'s control key and its cloud relay address. Use this if the device was re-paired in the CozyLife app and stopped responding. Your password is used for this single request and is not saved.",
+        "data": {
+          "email": "Email address",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -29,7 +37,9 @@
     },
     "abort": {
       "already_configured": "That device is already set up.",
-      "no_devices": "This CozyLife account has no devices on it."
+      "no_devices": "This CozyLife account has no devices on it.",
+      "device_not_found": "That device is no longer on this CozyLife account. If you signed in with a different account, try again with the one the device is paired to.",
+      "reconfigure_successful": "Credentials refreshed."
     }
   },
   "options": {

@@ -112,6 +112,67 @@ class CozyLifeConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=CREDENTIALS_SCHEMA, errors=errors
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Refresh a configured device's credentials and endpoints.
+
+        A device's ``device_key`` changes when it is re-paired in the
+        CozyLife app, and its relay endpoint can be reassigned. Without
+        this the only recovery is deleting the entry and adding it again,
+        which loses the entity id and with it every dashboard and
+        automation that refers to it.
+        """
+
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                devices = await self.hass.async_add_executor_job(
+                    _fetch_devices, user_input[CONF_EMAIL], user_input[CONF_PASSWORD]
+                )
+            except AuthError:
+                errors["base"] = "invalid_auth"
+            except CozyLifeError:
+                errors["base"] = "cannot_connect"
+            else:
+                wanted = entry.data[CONF_DEVICE_ID]
+                device = next(
+                    (d for d in devices if d.device_id == wanted), None
+                )
+                if device is None:
+                    # Signing in with a different account, or after removing
+                    # the device. Say so rather than silently repointing the
+                    # entry at somebody else's socket.
+                    return self.async_abort(reason="device_not_found")
+
+                targets = await async_broadcast_targets(self.hass)
+                local_ip = await self.hass.async_add_executor_job(
+                    partial(find_device_ip, device.device_id, targets=targets)
+                )
+
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates={
+                        CONF_DEVICE_KEY: device.device_key,
+                        CONF_DEVICE_NAME: device.name,
+                        CONF_RELAY_HOST: device.relay_host,
+                        CONF_RELAY_PORT: device.relay_port,
+                        CONF_MODEL: device.model,
+                        # A device that is merely switched off should not
+                        # lose its known address as a side effect of this.
+                        CONF_LOCAL_IP: local_ip or entry.data[CONF_LOCAL_IP],
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=CREDENTIALS_SCHEMA,
+            errors=errors,
+            description_placeholders={"device": entry.title},
+        )
+
     async def async_step_device(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

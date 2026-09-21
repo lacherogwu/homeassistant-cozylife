@@ -1,128 +1,167 @@
-# homeassistant-cozylife-cloud
+# CozyLife for Home Assistant
 
-**Status: private development. Not yet published. Do not push this repo to
-GitHub until explicitly told to — see `WORKING_NOTES.md`.**
+A Home Assistant integration for CozyLife smart sockets that keeps working
+when the device's local control path dies.
 
-A Home Assistant custom integration for CozyLife devices that keeps
-working when the device's local control path dies.
+Local-first, with automatic fallback to CozyLife's cloud relay.
 
-## The problem
+## Why this exists
 
 CozyLife devices expose a local TCP control protocol on port 5555. On at
-least some of their hardware that listener leaks and stops accepting
-connections after a few days of uptime, recoverable only by physically
-power-cycling the device. It is a firmware fault with no client-side fix:
-a persistent socket and a fresh connection per poll were measured against
-each other and scored identically, so the variable is uptime, not client
-behaviour.
+least some of their hardware **that listener leaks and stops accepting
+connections after a few days of uptime**, and only a physical power-cycle
+brings it back.
 
-Home Assistant's response is to mark the entity `unavailable` until
-somebody notices. The CozyLife phone app, meanwhile, keeps working the
-whole time — because it does not use the local protocol at all. It talks
-to CozyLife's cloud relay, an entirely separate path that stays up.
+It is a firmware fault with no client-side fix. A persistent socket and a
+fresh connection per poll were measured against each other and scored
+identically, so it is not caused by how a client behaves.
 
-## What this does
+Home Assistant's response is to mark the entity `unavailable` until somebody
+notices. The CozyLife phone app, meanwhile, carries on — because it never
+uses the local protocol at all. It talks to CozyLife's cloud relay, a
+completely separate path that stays up.
 
-Local first, cloud relay as fallback:
+This integration uses both.
 
-- **Local** (`api/local.py`) — the device's own listener. Fast, private,
-  works with the internet down.
-- **Cloud** (`api/cloud.py`) — CozyLife's relay, the same one the app
-  uses. Slower and vendor-dependent, but alive when local is not.
-- **Failover** (`api/fallback.py`) — prefers local, falls back on
-  failure, and returns to local as soon as it recovers.
+## What it does
 
-A **circuit breaker** is what makes local-first affordable. The listener
-stays dead for days once it goes, so without one every poll and every
-button press in that window would first wait out the local timeout —
-seconds of lag on a light switch, for days. After three consecutive local
-failures the local path is skipped entirely and requests go straight to the
-relay, with one probe every ten minutes to notice a power-cycle. Measured
-against a real device with its listener down, that takes the steady-state
-cost of a read from ~1.8s to 0.72s, which is pure cloud latency.
+- **Local first.** Plain TCP to the device. Fast (~11 ms), private, and
+  works with your internet down.
+- **Cloud relay as fallback.** The same relay the phone app uses (~720 ms).
+  Slower and vendor-dependent, but alive when the local listener is not.
+- **Switches back on its own** as soon as local recovers.
+- **A `connection_path` attribute** on the entity, reading `local` or
+  `cloud`, so you can see which path is carrying traffic. Failover is meant
+  to be invisible, which is exactly what makes a permanently broken local
+  path easy to miss.
 
-The local transport holds its connection open rather than opening one per
-call. The leading suspect for the firmware fault is a per-connection leak,
-and a fresh socket per poll is thousands of connections a day where reuse
-is a handful. Reconnecting only ever happens when it is known the frame has
-not gone out — the peer had hung up, or the write itself failed — because a
-command that may already have reached the device must not be sent twice.
+A **circuit breaker** is what makes local-first affordable. Once the
+listener dies it stays dead for days, so without one every poll and every
+button press would first wait out the local timeout. After three
+consecutive failures the local path is skipped entirely and requests go
+straight to the relay, with a probe every ten minutes to notice a
+power-cycle. Measured on real hardware, that takes a read from ~1.8 s back
+down to ~0.72 s — pure cloud latency.
 
-A device that answers and *refuses* a command is not retried on the other
-path: it was reached, so the cloud cannot do better, and a retry would
-risk driving the hardware twice.
+### Supported devices
 
-The entity exposes a `connection_path` attribute reading `local` or
-`cloud`. Failover is meant to be invisible, which is exactly what makes a
-permanently-broken local path easy to miss.
+**Switches and sockets only.** The integration creates a single switch
+entity per device, controlling datapoint 1.
 
-## Address discovery
+You can add a CozyLife *bulb*, but you will get an on/off switch with no
+brightness or colour control. If you only have lights, use
+[`polaralias/homeassistant-cozylife`](https://github.com/polaralias/homeassistant-cozylife)
+instead — it has proper light support, just no cloud fallback.
 
-The account's device list returns each device's assigned *relay* address,
-never its address on your network, so the local path needs discovery to
-supply it. That runs over UDP (port 6095) rather than TCP, which matters:
-the UDP responder keeps answering after the TCP listener has stopped, so
-a device whose local control is dead can still be located. A DHCP lease
-change also repairs itself on the next poll instead of stranding the
-entity — otherwise local control would break permanently and invisibly,
-with the cloud fallback quietly covering for it forever.
+### What it does not fix
 
-## Relationship to `polaralias/homeassistant-cozylife`
+The entity still goes `unavailable` if **both** paths are down at once:
 
-Independent implementation, with credit to that project as prior art for
-the local protocol. No code is copied from it, and it is not a fork.
+- the socket has no power, or has lost Wi-Fi
+- your internet is down *and* the local listener is already dead
+- the device was re-paired, so its stored key is stale — use
+  **Reconfigure** to refresh it
 
-That was weighed seriously. For a single metering socket exposed as one
-switch, its ~4,000 lines plus a 16,700-line device catalogue reduce to
-roughly 250 relevant lines — the catalogue collapses to a single 20-line
-object, its light and sensor platforms go unused, and its IP-range
-scanning config flow is replaced entirely by the account's own device
-list. Its architecture also resists a second transport: module-level
-polling loops, entities mutating client internals, and four legacy config
-shapes each platform re-flattens.
+You are covered whenever at least one path works. Notably, if local is
+healthy an internet outage costs you nothing.
 
-This integration uses the domain `cozylife_cloud`, not `cozylife`, so it
-installs alongside that project rather than displacing it.
+## Installation
 
-## Layout
+### HACS (recommended)
+
+1. HACS → ⋮ → **Custom repositories**
+2. Add this repository's URL, category **Integration**
+3. Install **CozyLife**, then restart Home Assistant
+
+### Manual
+
+Copy `custom_components/cozylife_cloud/` into your `config/custom_components/`
+directory and restart Home Assistant.
+
+## Setup
+
+**Settings → Devices & Services → Add Integration → CozyLife.**
+
+You are asked for your CozyLife account email and password. That is needed
+for exactly one request: reading your account's device list, which is the
+only place a device's control key (`device_key`) and its assigned relay
+address can be obtained.
+
+**Your password is not stored.** It is used for that single call and then
+discarded; only the per-device key is written to the config entry.
+
+The device's address on your network is found automatically over UDP. If it
+does not answer — switched off, or on another subnet — you can enter its IP
+by hand.
+
+### Options
+
+| Option | Default | Notes |
+|---|---|---|
+| Seconds between polls | 120 | Deliberately slow. Polling the local listener harder appears to bring the firmware fault on sooner. |
+| Local connection timeout | 5 s | |
+| Cloud relay timeout | 10 s | |
+
+### If the device is re-paired
+
+Re-pairing in the CozyLife app changes its control key. Use **Reconfigure**
+on the integration to refresh it, rather than deleting and re-adding the
+device — that keeps the entity id, and everything referring to it.
+
+## Troubleshooting
+
+**Which path is it using?** Check the `connection_path` attribute on the
+entity. It is recorded, so you can also see transitions after the fact in
+history.
+
+**Nothing in the logs.** Home Assistant is near-silent by default, so this
+integration's path-change lines do not appear. Add:
+
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.cozylife_cloud: info
+```
+
+You will then see lines like
+`CozyLife switched from the local path to the cloud path`.
+
+**Device moved to a new IP.** Handled automatically. Discovery runs over
+UDP, which keeps working even when the TCP listener is dead, so a DHCP
+lease change repairs itself on the next poll.
+
+## How it works
+
+The wire protocol lives in `custom_components/cozylife_cloud/api/`, which
+imports nothing from Home Assistant, so it can be tested on its own:
 
 ```
-custom_components/cozylife_cloud/
-  brand/          icon and logo, shipped with the integration (see below)
-  api/            no Home Assistant imports — the wire protocol, testable alone
-    protocol.py   frame encode/decode, shared by both transports
-    wire.py       CRLF line framing over TCP
-    local.py      the device's own listener on port 5555
-    cloud.py      CozyLife's relay (subscribe-before-publish)
-    fallback.py   local-first, cloud on failure
-    rediscovering.py  local transport that follows a device that moves
-    discovery.py  UDP device location
-    account.py    login + device list, the only source of device_key
-  config_flow.py  account sign-in, device choice, address fallback
-  coordinator.py  polling and command dispatch
-  switch.py       the switch entity
+protocol.py       frame encode/decode, shared by both transports
+wire.py           CRLF line framing over TCP
+local.py          the device's own listener on port 5555
+cloud.py          CozyLife's relay (subscribe-before-publish)
+fallback.py       local-first, cloud on failure, with the circuit breaker
+rediscovering.py  a local transport that follows a device that moves
+discovery.py      UDP device location
+account.py        login and device list — the only source of device_key
 ```
+
+Two details are worth knowing if you read the code. The relay requires a
+client to **subscribe to the report topic before publishing** a command, or
+it has nowhere to route the reply and the answer simply never arrives. And
+the local transport **holds its connection open**, reconnecting only when
+the frame provably has not gone out — a command that may already have
+reached the device must never be sent twice.
 
 ## Branding
 
 Since Home Assistant 2026.3 a custom integration ships its own brand images
-in a `brand/` directory, and those take priority over the brands CDN. No
-pull request to `home-assistant/brands` is needed, and it works on a
-private repository.
+in `brand/`, and those take priority over the brands CDN.
 
-The mark is CozyLife's own, carried over from the
-`polaralias/homeassistant-cozylife` integration's assets — the one thing
-this project does reuse from it, since a made-up glyph would only make the
-integration harder to recognise in a list. It is CozyLife's trademark,
-neither ours nor that project's to license; using a vendor's mark to
-identify an integration that talks to that vendor's devices is nominative
-use, and is what the entire Home Assistant brands catalogue does.
-
-`scripts/make_brand_assets.py` regenerates the set from
-`scripts/assets/cozylife-mark-512.png`, sampling the wordmark colour from
-the mark so the lockup stays consistent if the source art changes. No dark
-variants are shipped: a white mark on saturated blue, and a blue wordmark,
-both hold up on light and dark backgrounds.
+The mark is CozyLife's own. It is their trademark, used here only to
+identify the devices this integration talks to.
+`scripts/make_brand_assets.py` regenerates the set.
 
 ## Development
 
@@ -130,19 +169,27 @@ both hold up on light and dark backgrounds.
 uv venv --python 3.13 .venv
 uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/pytest
-.venv/bin/ruff check custom_components tests
+.venv/bin/ruff check custom_components tests scripts
 ```
 
-The suite runs entirely against in-process fakes and is pinned to
-loopback-only networking, so it cannot reach a real device or CozyLife
-even by accident. See **`WRITE_SAFETY.md`** — read it before touching
-anything that writes to a device.
+The suite runs entirely against in-process fakes and is **pinned to
+loopback-only networking**, so it cannot reach a real device or CozyLife's
+servers even by accident.
 
-## What must never end up in this repo, even in git history
+**Read [`WRITE_SAFETY.md`](WRITE_SAFETY.md) before touching anything that
+writes to a device.** These are mains-powered sockets; a stray write
+switches real current.
 
-- Any real `device_id`, `device_key`, account email, or account password.
-- Any Home Assistant instance hostname, IP, or token.
+## Credits
 
-Those live in the sibling private repo's tooling and the macOS Keychain,
-deliberately kept out of this one because this repository is headed for a
-**public** GitHub repository once the integration is confirmed working.
+The local protocol was independently implemented, with credit to
+[`polaralias/homeassistant-cozylife`](https://github.com/polaralias/homeassistant-cozylife)
+as prior art. No code is copied from it and this is not a fork; it uses a
+separate domain (`cozylife_cloud`) so the two can be installed side by side.
+
+The cloud relay protocol was reverse-engineered from CozyLife's own Android
+app. It is undocumented and unsupported, and may change without notice.
+
+## Licence
+
+[MIT](LICENSE). The CozyLife name and mark are not covered by it.

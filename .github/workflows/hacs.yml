@@ -1,0 +1,22 @@
+name: HACS validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # This integration is not in Home Assistant's brands repository:
+          # since 2026.3 it ships its own images in brand/, which take
+          # priority over the CDN. See "Branding" in the README.
+          ignore: brands

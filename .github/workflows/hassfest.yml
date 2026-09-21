@@ -1,0 +1,19 @@
+name: Validate with hassfest
+
+# Home Assistant's own validator for integration structure and manifest.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Catches the manifest going stale against new Home Assistant releases
+    # without anyone having touched the repository.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master

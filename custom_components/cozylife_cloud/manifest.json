@@ -8,10 +8,10 @@
   "dependencies": [
     "network"
   ],
-  "documentation": "https://github.com/lacherogwu/homeassistant-cozylife-cloud",
+  "documentation": "https://github.com/lacherogwu/homeassistant-cozylife",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/lacherogwu/homeassistant-cozylife-cloud/issues",
+  "issue_tracker": "https://github.com/lacherogwu/homeassistant-cozylife/issues",
   "requirements": [],
   "version": "0.1.0"
 }
