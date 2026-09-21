@@ -32,6 +32,22 @@ Local first, cloud relay as fallback:
 - **Failover** (`api/fallback.py`) — prefers local, falls back on
   failure, and returns to local as soon as it recovers.
 
+A **circuit breaker** is what makes local-first affordable. The listener
+stays dead for days once it goes, so without one every poll and every
+button press in that window would first wait out the local timeout —
+seconds of lag on a light switch, for days. After three consecutive local
+failures the local path is skipped entirely and requests go straight to the
+relay, with one probe every ten minutes to notice a power-cycle. Measured
+against a real device with its listener down, that takes the steady-state
+cost of a read from ~1.8s to 0.72s, which is pure cloud latency.
+
+The local transport holds its connection open rather than opening one per
+call. The leading suspect for the firmware fault is a per-connection leak,
+and a fresh socket per poll is thousands of connections a day where reuse
+is a handful. Reconnecting only ever happens when it is known the frame has
+not gone out — the peer had hung up, or the write itself failed — because a
+command that may already have reached the device must not be sent twice.
+
 A device that answers and *refuses* a command is not retried on the other
 path: it was reached, so the cloud cannot do better, and a retry would
 risk driving the hardware twice.
