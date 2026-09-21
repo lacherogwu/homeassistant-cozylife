@@ -194,7 +194,7 @@ identify the devices this integration talks to.
 uv venv --python 3.13 .venv
 uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/pytest
-.venv/bin/ruff check custom_components tests scripts
+.venv/bin/ruff check custom_components tests
 ```
 
 The suite runs entirely against in-process fakes and is **pinned to
