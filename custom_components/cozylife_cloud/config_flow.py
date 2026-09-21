@@ -13,9 +13,11 @@ still makes the fallback path work.
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Any
 
 import voluptuous as vol
+from homeassistant.components.network import async_get_ipv4_broadcast_addresses
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -56,6 +58,12 @@ CREDENTIALS_SCHEMA = vol.Schema(
         vol.Required(CONF_PASSWORD): cv.string,
     }
 )
+
+
+async def async_broadcast_targets(hass) -> list[str]:
+    """Every IPv4 broadcast address on this host, for a discovery probe."""
+
+    return [str(address) for address in await async_get_ipv4_broadcast_addresses(hass)]
 
 
 def _fetch_devices(email: str, password: str) -> list[CozyLifeDevice]:
@@ -153,8 +161,13 @@ class CozyLifeConfigFlow(ConfigFlow, domain=DOMAIN):
         self._device = device
         # The account knows the relay address but never the device's own, so
         # the local path needs discovery to supply it.
+        #
+        # Broadcast on every interface Home Assistant knows about, not just
+        # 255.255.255.255: a host with a LAN adapter and Docker bridges can
+        # send that out the wrong one, and the probe never reaches the LAN.
+        targets = await async_broadcast_targets(self.hass)
         local_ip = await self.hass.async_add_executor_job(
-            find_device_ip, device.device_id
+            partial(find_device_ip, device.device_id, targets=targets)
         )
         if not local_ip:
             return await self.async_step_address()

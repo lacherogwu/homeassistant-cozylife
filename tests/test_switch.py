@@ -311,3 +311,32 @@ async def test_unloading_releases_the_devices_connection(hass: HomeAssistant):
     await hass.async_block_till_done()
 
     assert client.closed is True
+
+
+async def test_runtime_rediscovery_also_broadcasts_on_every_interface(
+    hass: HomeAssistant,
+):
+    """The same routing problem applies to the rediscovery that repairs a
+    DHCP lease change, not just to initial setup."""
+
+    from custom_components.cozylife_cloud import build_client
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, data=ENTRY_DATA, title="Test Socket",
+        unique_id=ENTRY_DATA[CONF_DEVICE_ID],
+    )
+    entry.add_to_hass(hass)
+
+    seen = {}
+
+    def record(device_id, *, targets=None, **kwargs):
+        seen["targets"] = targets
+        return None
+
+    with patch(
+        "custom_components.cozylife_cloud.find_device_ip", side_effect=record
+    ):
+        client = build_client(entry, ["255.255.255.255", "192.0.2.255"])
+        client._local._rediscover("whatever")
+
+    assert seen["targets"] == ["255.255.255.255", "192.0.2.255"]

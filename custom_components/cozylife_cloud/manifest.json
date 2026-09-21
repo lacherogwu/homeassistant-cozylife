@@ -5,7 +5,9 @@
     "@lacherogwu"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "network"
+  ],
   "documentation": "https://github.com/lacherogwu/homeassistant-cozylife-cloud",
   "integration_type": "device",
   "iot_class": "local_polling",

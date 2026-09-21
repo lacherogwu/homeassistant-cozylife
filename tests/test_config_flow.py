@@ -271,3 +271,35 @@ async def test_the_poll_interval_can_be_changed_afterwards(hass: HomeAssistant):
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SCAN_INTERVAL] == 300
+
+
+async def test_discovery_broadcasts_on_every_interface(hass: HomeAssistant):
+    """Home Assistant runs on a host with several interfaces -- a LAN
+    adapter plus Docker bridges. A probe sent only to 255.255.255.255 can
+    leave on the wrong one and never reach the device, which is exactly
+    what happened on the real instance. Asking Home Assistant for every
+    interface's broadcast address makes the probe reach the LAN."""
+
+    account = cloud()
+    seen = {}
+
+    def record(device_id, *, targets=None, **kwargs):
+        seen["targets"] = targets
+        return "192.0.2.50"
+
+    try:
+        with patch(
+            "custom_components.cozylife_cloud.config_flow.find_device_ip",
+            side_effect=record,
+        ), patch(
+            "custom_components.cozylife_cloud.async_setup_entry", return_value=True
+        ):
+            result = await start(hass)
+            await hass.config_entries.flow.async_configure(
+                result["flow_id"], CREDENTIALS
+            )
+    finally:
+        account.stop()
+
+    assert seen["targets"], "discovery was given no broadcast targets"
+    assert "255.255.255.255" in seen["targets"]
