@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editors / OS
+.DS_Store
+.vscode/
+
+# Never let a stray secret get staged by accident
+.env
+.env.*
+*credentials*
+*secrets*
