@@ -65,6 +65,26 @@ The entity still goes `unavailable` if **both** paths are down at once:
 You are covered whenever at least one path works. Notably, if local is
 healthy an internet outage costs you nothing.
 
+### The local listener cannot be revived remotely
+
+Worth stating so nobody investigates it twice. Once the listener dies, only
+a physical power-cycle brings it back:
+
+- The device exposes exactly one TCP port, the dead one, plus UDP 6095.
+  There is no web interface and no other management port.
+- UDP 6095 is discovery-only. Every command number from 0 to 99 was swept;
+  only 0, 2 and 3 exist at all, and all return `res:1` uniformly.
+- The protocol's three commands are info, query and set. None reboots.
+  A remote revival would therefore have to be a *datapoint* write.
+- CozyLife's own app has no restart function, and a capture of its relay
+  traffic contains no reboot-like command. If the vendor's app cannot do
+  it, there is most likely nothing to find.
+- Switching the relay off does not help: the Wi-Fi module is powered from
+  mains directly, independent of the relay output.
+
+This is why the integration exists. It does not fix the fault; it stops the
+fault mattering.
+
 ## Installation
 
 ### HACS (recommended)
@@ -126,6 +146,12 @@ logger:
 
 You will then see lines like
 `CozyLife switched from the local path to the cloud path`.
+
+**The socket switches itself off a few seconds after every turn-on.**
+That is the device's own countdown timer, not this integration. The
+CozyLife app can arm a countdown that persists on the device and re-arms on
+every turn-on, including turn-ons from Home Assistant. Clear it in the app,
+or write datapoints `52` (countdown seconds) and `53` (enable) back to `0`.
 
 **Device moved to a new IP.** Handled automatically. Discovery runs over
 UDP, which keeps working even when the TCP listener is dead, so a DHCP
