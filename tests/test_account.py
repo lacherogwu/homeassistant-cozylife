@@ -14,7 +14,7 @@ credentials rather than a malformed request.
 import pytest
 
 from custom_components.cozylife_cloud.api.account import CozyLifeAccount
-from custom_components.cozylife_cloud.api.errors import AuthError
+from custom_components.cozylife_cloud.api.errors import AuthError, CozyLifeError
 
 from .fakes import FakeHttpServer
 
@@ -253,3 +253,55 @@ def test_a_device_repr_does_not_leak_its_key():
         device = account(server).devices(TOKEN)[0]
 
         assert "fake-key-one" not in repr(device)
+
+
+def test_login_sends_the_package_version():
+    """Omitting this makes a *correct* login fail with an unhandled HTTP 500.
+
+    The server's own required-field list does not mention it, so probing
+    with a deliberately wrong password never reveals the problem -- the
+    failure is in the success path, past validation. Exactly the same trap
+    as the Null Island coordinates above, and it cost a real login attempt
+    to find both times.
+    """
+
+    with FakeHttpServer({LOGIN_PATH: ok_login()}) as server:
+        account(server).login("someone@example.com", "hunter2")
+
+        assert server.requests[0]["form"]["package_version"]
+
+
+def test_a_server_error_on_login_is_reported_as_a_login_problem():
+    """A 500 here means the request reached CozyLife and their code fell
+    over on it -- a malformed request, not an unreachable network. Reporting
+    it as 'cannot connect' sends the user to check their router."""
+
+    import http.server
+    import threading
+
+    class Boom(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_POST(self):
+            self.send_response(500)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Boom)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    )
+    thread.start()
+    try:
+        host, port = server.server_address[:2]
+        client = CozyLifeAccount(base_url=f"http://{host}:{port}", timeout=5)
+        with pytest.raises(CozyLifeError) as caught:
+            client.login("someone@example.com", "hunter2")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert "500" in str(caught.value)
+    assert "rejected" in str(caught.value).lower()

@@ -41,6 +41,13 @@ USER_PRIVACY_VERSION = "1.0.0"
 # though it looks exactly like one. Any app-shaped agent string clears it.
 USER_AGENT = "CozyLife/1.20.24 okhttp/4.9.0"
 
+# Sent by the app on every login. The server's own required-field list
+# does not mention it, but omitting it makes a *correct* login fail with an
+# unhandled HTTP 500 -- the failure is in the success path, past validation,
+# so probing with a deliberately wrong password never reveals it. Same trap
+# as the coordinates below; both cost a real login attempt to find.
+PACKAGE_VERSION = "1200240553"
+
 # The server geolocates a *successful* login to choose a relay, and throws
 # an unhandled 500 when the coordinates resolve to no country -- which 0,0
 # ("Null Island") does. A failed login never reaches that code path, so
@@ -108,6 +115,7 @@ class CozyLifeAccount:
             "lat": str(latitude),
             "lng": str(longitude),
             "package_name": PACKAGE_NAME,
+            "package_version": PACKAGE_VERSION,
             "user_term_version": USER_TERM_VERSION,
             "user_privacy_version": USER_PRIVACY_VERSION,
         }
@@ -190,6 +198,15 @@ class CozyLifeAccount:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as err:
+            # A 5xx means the request reached CozyLife and their code fell
+            # over on it -- a malformed request, not an unreachable network.
+            # Saying "cannot connect" would send the user to their router.
+            if err.code >= 500:
+                raise CozyLifeError(
+                    f"CozyLife rejected the request with HTTP {err.code}. "
+                    "Their server errors rather than validating when a login "
+                    "field is missing or a value is one it cannot handle."
+                ) from err
             raise CozyLifeError(
                 f"CozyLife returned HTTP {err.code} for {path}"
             ) from err

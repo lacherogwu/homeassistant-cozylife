@@ -1,7 +1,9 @@
 {
   "domain": "cozylife_cloud",
-  "name": "CozyLife Cloud Fallback",
-  "codeowners": ["@lacherogwu"],
+  "name": "CozyLife",
+  "codeowners": [
+    "@lacherogwu"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/lacherogwu/homeassistant-cozylife-cloud",
