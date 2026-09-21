@@ -13,8 +13,3 @@ venv/
 .env.*
 *credentials*
 *secrets*
-
-# Private development log. Names the sibling private repo and this machine's
-# paths, so it must not reach the public repository. Kept on disk; its proper
-# long-term home is the private repo alongside the design doc.
-WORKING_NOTES.md
