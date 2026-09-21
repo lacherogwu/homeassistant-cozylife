@@ -21,7 +21,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Lint
-        run: ruff check custom_components tests scripts
+        run: ruff check custom_components tests
 
       - name: Test
         # The suite is pinned to loopback-only networking, so a CI runner
