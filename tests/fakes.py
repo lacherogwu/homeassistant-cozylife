@@ -23,8 +23,15 @@ class FakeLineServer:
     never answers -- the exact failure mode this project exists to survive.
     """
 
-    def __init__(self, handler: Callable[[bytes], list[bytes]]) -> None:
+    def __init__(
+        self,
+        handler: Callable[[bytes], list[bytes]],
+        *,
+        close_after_each: bool = False,
+    ) -> None:
         self._handler = handler
+        self._close_after_each = close_after_each
+        self.connections = 0
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.bind(("127.0.0.1", 0))
@@ -56,6 +63,7 @@ class FakeLineServer:
 
     def _handle(self, conn: socket.socket) -> None:
         buffer = b""
+        self.connections += 1
         conn.settimeout(0.02)
         try:
             while not self._stop.is_set():
@@ -73,6 +81,9 @@ class FakeLineServer:
                     self.received.append(line)
                     for reply in self._handler(line):
                         conn.sendall(reply)
+                    if self._close_after_each:
+                        # Model a device that hangs up after each exchange.
+                        return
         finally:
             conn.close()
 

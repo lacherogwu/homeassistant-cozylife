@@ -168,3 +168,215 @@ def test_without_a_cloud_a_dead_listener_simply_raises():
 
     with pytest.raises(TransportError):
         client.query()
+
+
+class Clock:
+    """A hand-cranked monotonic clock, so breaker timings are exact."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def with_breaker(local, cloud, *, threshold=3, recovery=600.0, clock=None):
+    return FallbackClient(
+        local,
+        cloud,
+        failure_threshold=threshold,
+        recovery_interval=recovery,
+        monotonic=clock or Clock(),
+    )
+
+
+def test_an_occasional_local_failure_does_not_stop_us_trying_local():
+    """A single dropped poll is not the firmware fault. Giving up on local
+    after one blip would send months of traffic to the cloud needlessly."""
+
+    local = StubTransport("local", broken=True)
+    client = with_breaker(local, StubTransport("cloud"), threshold=3)
+
+    client.query()
+    local.broken = False
+    client.query()
+
+    assert local.queries == 2
+    assert client.active_path == "local"
+
+
+def test_repeated_local_failures_stop_it_being_tried_at_all():
+    """Once the listener is gone it stays gone for days. Paying its full
+    timeout on every poll and every button press for that whole period is
+    the real cost of local-first, and this is what removes it."""
+
+    local = StubTransport("local", broken=True)
+    client = with_breaker(local, StubTransport("cloud"), threshold=3)
+
+    for _ in range(3):
+        client.query()
+    attempts_before = local.queries
+
+    client.query()
+    client.query()
+
+    assert local.queries == attempts_before
+    assert client.local_circuit_open is True
+
+
+def test_requests_are_still_served_while_local_is_cut_out():
+    local = StubTransport("local", broken=True)
+    client = with_breaker(local, StubTransport("cloud", data={"1": 1}), threshold=2)
+
+    for _ in range(4):
+        result = client.query()
+
+    assert result == {"1": 1}
+    assert client.active_path == "cloud"
+
+
+def test_local_is_probed_again_once_the_recovery_interval_passes():
+    """A power-cycle brings the listener back. Nothing tells us when, so the
+    only way to notice is to try again periodically."""
+
+    clock = Clock()
+    local = StubTransport("local", broken=True)
+    client = with_breaker(
+        local, StubTransport("cloud"), threshold=2, recovery=600.0, clock=clock
+    )
+
+    for _ in range(3):
+        client.query()
+    attempts_while_open = local.queries
+
+    clock.advance(601)
+    client.query()
+
+    assert local.queries == attempts_while_open + 1
+
+
+def test_a_successful_probe_puts_local_back_in_service():
+    clock = Clock()
+    local = StubTransport("local", broken=True)
+    client = with_breaker(
+        local, StubTransport("cloud"), threshold=2, recovery=600.0, clock=clock
+    )
+    for _ in range(3):
+        client.query()
+
+    local.broken = False
+    clock.advance(601)
+    client.query()
+
+    assert client.local_circuit_open is False
+    assert client.active_path == "local"
+
+
+def test_a_failed_probe_waits_out_another_interval():
+    """Otherwise every subsequent request would probe again and the timeout
+    penalty would be back."""
+
+    clock = Clock()
+    local = StubTransport("local", broken=True)
+    client = with_breaker(
+        local, StubTransport("cloud"), threshold=2, recovery=600.0, clock=clock
+    )
+    for _ in range(3):
+        client.query()
+
+    clock.advance(601)
+    client.query()
+    attempts_after_probe = local.queries
+
+    client.query()
+    clock.advance(10)
+    client.query()
+
+    assert local.queries == attempts_after_probe
+
+
+def test_a_local_success_clears_the_tally_of_earlier_failures():
+    """Failures have to be consecutive to mean anything; intermittent ones
+    spread over weeks should not eventually add up to tripping the breaker."""
+
+    clock = Clock()
+    local = StubTransport("local", broken=True)
+    client = with_breaker(local, StubTransport("cloud"), threshold=3, clock=clock)
+
+    client.query()
+    client.query()
+    local.broken = False
+    client.query()
+    local.broken = True
+    client.query()
+    client.query()
+
+    assert client.local_circuit_open is False
+
+
+def test_writes_also_stop_paying_the_dead_local_timeout():
+    local = StubTransport("local", broken=True)
+    client = with_breaker(local, StubTransport("cloud"), threshold=2)
+
+    for _ in range(3):
+        client.query()
+    controls_before = len(local.controls)
+
+    assert client.control({"1": 0}) is True
+    assert len(local.controls) == controls_before
+
+
+def test_without_a_cloud_path_local_is_never_cut_out():
+    """There would be nothing left to serve the request. A slow answer beats
+    no answer."""
+
+    local = StubTransport("local", broken=True)
+    client = FallbackClient(local, None, failure_threshold=2)
+
+    for _ in range(5):
+        with pytest.raises(TransportError):
+            client.query()
+
+    assert local.queries == 5
+    assert client.local_circuit_open is False
+
+
+def test_cutting_local_out_is_logged_at_info(caplog):
+    local = StubTransport("local", broken=True)
+    client = with_breaker(local, StubTransport("cloud"), threshold=2)
+
+    with caplog.at_level(logging.INFO):
+        for _ in range(2):
+            client.query()
+
+    assert "local" in caplog.text.lower()
+
+
+def test_closing_the_client_releases_the_local_connection():
+    """The local transport now holds a socket open. Leaving it dangling
+    across a config entry reload would leak one per reload -- on a device
+    whose whole problem is thought to be leaked connections."""
+
+    class ClosableTransport(StubTransport):
+        def __init__(self, name):
+            super().__init__(name)
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    local = ClosableTransport("local")
+    client = FallbackClient(local, StubTransport("cloud"))
+
+    client.close()
+
+    assert local.closed is True
+
+
+def test_closing_a_client_whose_transport_cannot_be_closed_is_harmless():
+    """Not every transport holds a resource; the cloud one does not."""
+
+    FallbackClient(StubTransport("local"), StubTransport("cloud")).close()

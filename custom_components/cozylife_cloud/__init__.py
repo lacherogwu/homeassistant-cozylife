@@ -89,9 +89,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: CozyLifeConfigEntry) -> 
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: CozyLifeConfigEntry) -> bool:
-    """Tear down a config entry."""
+    """Tear down a config entry, releasing the connection it holds."""
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        # The local transport keeps a socket open between polls; a reload
+        # that left it dangling would leak one every time.
+        await hass.async_add_executor_job(entry.runtime_data.client.close)
+    return unloaded
 
 
 async def _async_reload_on_update(

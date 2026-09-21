@@ -54,7 +54,12 @@ class StubClient:
         self.accepts = accepts
         self.active_path = path
         self.has_cloud_fallback = True
+        self.local_circuit_open = False
         self.controls = []
+        self.closed = False
+
+    def close(self):
+        self.closed = True
 
     def query(self, attrs=None):
         if self.broken:
@@ -292,3 +297,17 @@ async def test_the_poll_interval_option_is_honoured(hass: HomeAssistant):
         await hass.async_block_till_done()
 
     assert entry.runtime_data.update_interval == timedelta(seconds=45)
+
+
+async def test_unloading_releases_the_devices_connection(hass: HomeAssistant):
+    """The local transport holds a socket open between polls. A reload that
+    left it dangling would leak one each time -- on a device whose fault is
+    thought to be leaked connections."""
+
+    client = StubClient({"1": 1})
+    entry = await setup_integration(hass, client)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert client.closed is True

@@ -129,13 +129,62 @@ def test_a_listener_that_accepts_but_never_answers_raises_transport_error():
             transport.query()
 
 
-def test_each_call_uses_its_own_connection():
-    """Stateless calls: a socket left over from a dead listener can't poison
-    the next poll, and there is no shared state to lock."""
+def test_consecutive_calls_reuse_one_connection():
+    """Connection churn is the leading suspect for the firmware fault this
+    integration works around: the listener appears to leak per connection,
+    and a fresh socket per poll is thousands of connections a day. Holding
+    one open is the cheapest thing that might keep the device healthy."""
 
     with FakeLineServer(echo_state({"1": 1})) as server:
         transport = LocalTransport(server.host, port=server.port, timeout=2)
         transport.query()
         transport.query()
+        transport.query()
 
-        assert len(server.received) == 2
+        assert len(server.received) == 3
+        assert server.connections == 1
+
+
+def test_a_connection_the_device_hangs_up_on_is_replaced():
+    """Plenty of embedded devices drop idle connections. Reuse must be an
+    optimisation, not something the caller has to think about."""
+
+    with FakeLineServer(echo_state({"1": 1}), close_after_each=True) as server:
+        transport = LocalTransport(server.host, port=server.port, timeout=2)
+
+        assert transport.query() == {"1": 1}
+        assert transport.query() == {"1": 1}
+        assert server.connections == 2
+
+
+def test_closing_the_transport_releases_the_connection():
+    with FakeLineServer(echo_state({"1": 1})) as server:
+        transport = LocalTransport(server.host, port=server.port, timeout=2)
+        transport.query()
+        transport.close()
+        transport.query()
+
+        assert server.connections == 2
+
+
+def test_concurrent_callers_do_not_interleave_on_the_shared_socket():
+    """A poll and a button press can land together. Two frames written to
+    one socket at once would cross replies, so calls have to serialise."""
+
+    import threading
+
+    with FakeLineServer(echo_state({"1": 1})) as server:
+        transport = LocalTransport(server.host, port=server.port, timeout=5)
+        results = []
+
+        def poll():
+            results.append(transport.query())
+
+        threads = [threading.Thread(target=poll) for _ in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert results == [{"1": 1}] * 6
+        assert server.connections == 1

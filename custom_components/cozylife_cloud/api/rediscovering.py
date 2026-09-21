@@ -68,6 +68,17 @@ class RediscoveringLocalTransport:
     def __repr__(self) -> str:
         return f"RediscoveringLocalTransport({self._device_id} at {self._host})"
 
+    def close(self) -> None:
+        """Release the connection the wrapped transport holds."""
+
+        self._close(self._transport)
+
+    @staticmethod
+    def _close(transport: Any) -> None:
+        closer = getattr(transport, "close", None)
+        if callable(closer):
+            closer()
+
     def query(self, attrs: list[int] | None = None) -> dict[str, Any]:
         """Read datapoints, relocating the device first if it has moved."""
 
@@ -127,6 +138,8 @@ class RediscoveringLocalTransport:
             self._host,
             found,
         )
+        # Release the socket held to the old address before replacing it.
+        self._close(self._transport)
         self._host = found
         self._transport = self._factory(found)
         return True

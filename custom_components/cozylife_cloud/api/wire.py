@@ -70,6 +70,34 @@ class LineSocket:
                 return
             self._buffer += chunk
 
+    def peer_has_closed(self) -> bool:
+        """Whether the far end has hung up, checked without blocking.
+
+        Reusing a connection means inheriting the half-open problem: a
+        device that hung up while we were idle leaves a socket that still
+        accepts a write, and only reveals itself when the reply never comes.
+        A non-blocking peek distinguishes that up front, so a stale
+        connection can be replaced *before* a frame is sent rather than
+        after -- which matters, because a frame that may already have
+        reached the device must never be sent twice.
+        """
+
+        if self._buffer:
+            return False
+
+        try:
+            self._sock.setblocking(False)
+            peeked = self._sock.recv(_CHUNK, socket.MSG_PEEK)
+        except (BlockingIOError, InterruptedError):
+            return False  # nothing to read, connection still open
+        except OSError:
+            return True
+        finally:
+            with contextlib.suppress(OSError):
+                self._sock.setblocking(True)
+
+        return peeked == b""
+
     def _peer(self) -> str:
         try:
             host, port = self._sock.getpeername()[:2]

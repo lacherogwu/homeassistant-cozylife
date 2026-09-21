@@ -179,3 +179,43 @@ def test_it_reports_itself_as_the_local_path():
     transport, _, _ = build("192.0.2.5", reachable_at="192.0.2.5")
 
     assert transport.name == "local"
+
+
+def test_closing_it_closes_the_underlying_transport():
+    closed = []
+
+    class ClosableLocal(StubLocal):
+        def close(self):
+            closed.append(self.host)
+
+    transport = RediscoveringLocalTransport(
+        DEVICE_ID,
+        "192.0.2.5",
+        transport_factory=lambda h: ClosableLocal(h, "192.0.2.5"),
+        rediscover=lambda _d: None,
+    )
+    transport.close()
+
+    assert closed == ["192.0.2.5"]
+
+
+def test_replacing_a_moved_devices_transport_closes_the_old_one():
+    """Otherwise a device that changes address leaks the socket held to the
+    old one."""
+
+    closed = []
+
+    class ClosableLocal(StubLocal):
+        def close(self):
+            closed.append(self.host)
+
+    transport = RediscoveringLocalTransport(
+        DEVICE_ID,
+        "192.0.2.5",
+        transport_factory=lambda h: ClosableLocal(h, "192.0.2.9"),
+        rediscover=lambda _d: "192.0.2.9",
+        min_rediscovery_interval=0.0,
+    )
+    transport.query()
+
+    assert closed == ["192.0.2.5"]
