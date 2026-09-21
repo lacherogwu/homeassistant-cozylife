@@ -29,6 +29,7 @@ class FakeLineServer:
         self._socket.listen(8)
         self._stop = threading.Event()
         self.received: list[bytes] = []
+        self._workers: list[threading.Thread] = []
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
 
@@ -41,17 +42,19 @@ class FakeLineServer:
         return self._socket.getsockname()[1]
 
     def _serve(self) -> None:
-        self._socket.settimeout(0.2)
+        self._socket.settimeout(0.02)
         while not self._stop.is_set():
             try:
                 conn, _ = self._socket.accept()
             except (TimeoutError, OSError):
                 continue
-            threading.Thread(target=self._handle, args=(conn,), daemon=True).start()
+            worker = threading.Thread(target=self._handle, args=(conn,), daemon=True)
+            self._workers.append(worker)
+            worker.start()
 
     def _handle(self, conn: socket.socket) -> None:
         buffer = b""
-        conn.settimeout(0.2)
+        conn.settimeout(0.02)
         try:
             while not self._stop.is_set():
                 try:
@@ -72,8 +75,19 @@ class FakeLineServer:
             conn.close()
 
     def close(self) -> None:
+        """Stop serving and wait for every thread to actually exit.
+
+        The Home Assistant test harness asserts that no threads outlive a
+        test, so this joins rather than relying on daemon threads being
+        reaped at interpreter exit.
+        """
+
         self._stop.set()
         self._socket.close()
+        self._thread.join(timeout=5)
+        for worker in self._workers:
+            worker.join(timeout=5)
+        self._workers.clear()
 
     def __enter__(self) -> "FakeLineServer":
         return self
@@ -142,7 +156,7 @@ class FakeHttpServer:
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self._thread = threading.Thread(
-            target=self._server.serve_forever, daemon=True
+            target=self._server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
         )
         self._thread.start()
 
@@ -154,8 +168,57 @@ class FakeHttpServer:
     def close(self) -> None:
         self._server.shutdown()
         self._server.server_close()
+        self._thread.join(timeout=5)
 
     def __enter__(self) -> "FakeHttpServer":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
+class FakeUdpResponder:
+    """Stands in for a CozyLife device's UDP discovery responder.
+
+    The real one answers a ``cmd:0`` info broadcast with the device's id,
+    MAC, current LAN address and firmware versions -- and, usefully, keeps
+    answering after the device's TCP listener has stopped.
+    """
+
+    def __init__(self, replies: list[bytes]) -> None:
+        self._replies = replies
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._socket.bind(("127.0.0.1", 0))
+        self._socket.settimeout(0.02)
+        self._stop = threading.Event()
+        self.received: list[bytes] = []
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    @property
+    def port(self) -> int:
+        return self._socket.getsockname()[1]
+
+    def _serve(self) -> None:
+        while not self._stop.is_set():
+            try:
+                data, addr = self._socket.recvfrom(2048)
+            except (TimeoutError, OSError):
+                continue
+            self.received.append(data)
+            for reply in self._replies:
+                try:
+                    self._socket.sendto(reply, addr)
+                except OSError:
+                    pass
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+        self._socket.close()
+
+    def __enter__(self) -> "FakeUdpResponder":
         return self
 
     def __exit__(self, *_exc: object) -> None:
