@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import socket
 import threading
-from typing import Callable
+from collections.abc import Callable
+from typing import Self
 
 
 class FakeLineServer:
@@ -89,7 +90,7 @@ class FakeLineServer:
             worker.join(timeout=5)
         self._workers.clear()
 
-    def __enter__(self) -> "FakeLineServer":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:
@@ -115,9 +116,9 @@ class FakeHttpServer:
     """
 
     def __init__(self, routes: dict[str, dict]) -> None:
-        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         import json as _json
         import urllib.parse as _urlparse
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
         recorded: list[dict] = []
         self.requests = recorded
@@ -144,13 +145,13 @@ class FakeHttpServer:
                 self.end_headers()
                 self.wfile.write(encoded)
 
-            def do_POST(self):  # noqa: N802
+            def do_POST(self):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(length).decode()
                 parsed = _urlparse.urlparse(self.path)
                 self._respond(parsed.path, parsed.query, body, self.headers)
 
-            def do_GET(self):  # noqa: N802
+            def do_GET(self):
                 parsed = _urlparse.urlparse(self.path)
                 self._respond(parsed.path, parsed.query, "", self.headers)
 
@@ -170,7 +171,7 @@ class FakeHttpServer:
         self._server.server_close()
         self._thread.join(timeout=5)
 
-    def __enter__(self) -> "FakeHttpServer":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:
@@ -218,7 +219,7 @@ class FakeUdpResponder:
         self._thread.join(timeout=5)
         self._socket.close()
 
-    def __enter__(self) -> "FakeUdpResponder":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:

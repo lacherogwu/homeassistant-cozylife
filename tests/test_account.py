@@ -125,23 +125,24 @@ def test_login_sends_the_terms_versions_the_server_requires():
 
 def test_a_wrong_password_raises_a_recognisable_auth_error():
     body = {"ret": "1001", "desc": "account or password error"}
-    with FakeHttpServer({LOGIN_PATH: body}) as server:
-        with pytest.raises(AuthError, match="password"):
-            account(server).login("someone@example.com", "wrong")
+    with FakeHttpServer({LOGIN_PATH: body}) as server, pytest.raises(
+        AuthError, match="password"
+    ):
+        account(server).login("someone@example.com", "wrong")
 
 
 def test_an_unknown_account_raises_a_recognisable_auth_error():
     body = {"ret": "2006", "desc": "user not exist"}
-    with FakeHttpServer({LOGIN_PATH: body}) as server:
-        with pytest.raises(AuthError, match="[Nn]o account"):
-            account(server).login("nobody@example.com", "hunter2")
+    with FakeHttpServer({LOGIN_PATH: body}) as server, pytest.raises(
+        AuthError, match="[Nn]o account"
+    ):
+        account(server).login("nobody@example.com", "hunter2")
 
 
 def test_a_login_that_succeeds_without_a_token_is_still_an_error():
     body = {"ret": "1", "desc": "Success", "info": {}}
-    with FakeHttpServer({LOGIN_PATH: body}) as server:
-        with pytest.raises(AuthError):
-            account(server).login("someone@example.com", "hunter2")
+    with FakeHttpServer({LOGIN_PATH: body}) as server, pytest.raises(AuthError):
+        account(server).login("someone@example.com", "hunter2")
 
 
 def test_the_password_is_never_included_in_an_error_message():
@@ -225,9 +226,8 @@ def test_devices_survives_an_account_with_nothing_on_it():
 
 def test_an_expired_token_raises_auth_error_so_the_caller_can_re_login():
     body = {"ret": "1005", "desc": "token invalid"}
-    with FakeHttpServer({DEVICES_PATH: body}) as server:
-        with pytest.raises(AuthError):
-            account(server).devices("stale-token")
+    with FakeHttpServer({DEVICES_PATH: body}) as server, pytest.raises(AuthError):
+        account(server).devices("stale-token")
 
 
 def test_a_device_entry_missing_its_key_is_skipped_rather_than_crashing():

@@ -92,7 +92,7 @@ def _listen(
             sock.settimeout(remaining)
             try:
                 data, address = sock.recvfrom(2048)
-            except (TimeoutError, socket.timeout):
+            except TimeoutError:
                 return
             except OSError as err:
                 _LOGGER.debug("Discovery receive failed: %s", err)

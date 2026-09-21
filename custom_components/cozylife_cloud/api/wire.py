@@ -10,6 +10,7 @@ from __future__ import annotations
 import socket
 import time
 from collections.abc import Iterator
+from typing import Self
 
 from .errors import TransportError
 
@@ -59,7 +60,7 @@ class LineSocket:
             self._sock.settimeout(remaining)
             try:
                 chunk = self._sock.recv(_CHUNK)
-            except (TimeoutError, socket.timeout):
+            except TimeoutError:
                 return
             except OSError as err:
                 raise TransportError(f"failed reading from {self._peer()}: {err}") from err
@@ -81,7 +82,7 @@ class LineSocket:
         except OSError:
             pass
 
-    def __enter__(self) -> "LineSocket":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:

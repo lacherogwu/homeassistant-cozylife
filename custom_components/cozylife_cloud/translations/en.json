@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CozyLife account",
+        "description": "Sign in once so Home Assistant can read your device's control key and its assigned cloud relay. Your password is used for this single request and is not saved.",
+        "data": {
+          "email": "Email address",
+          "password": "Password"
+        }
+      },
+      "device": {
+        "title": "Choose a device",
+        "data": {
+          "device_id": "Device"
+        }
+      },
+      "address": {
+        "title": "Device address",
+        "description": "{device} did not answer discovery on this network. Enter its local IP address, or cancel, switch the device on and try again.",
+        "data": {
+          "local_ip": "IP address"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "That email address and password were not accepted by CozyLife.",
+      "cannot_connect": "Could not reach CozyLife. Check this machine's internet connection and try again."
+    },
+    "abort": {
+      "already_configured": "That device is already set up.",
+      "no_devices": "This CozyLife account has no devices on it."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CozyLife options",
+        "description": "Polling the device's local listener more often appears to bring on the firmware fault this integration works around, so a slow interval is deliberate.",
+        "data": {
+          "scan_interval": "Seconds between polls",
+          "local_timeout": "Local connection timeout (seconds)",
+          "cloud_timeout": "Cloud relay timeout (seconds)"
+        }
+      }
+    }
+  }
+}

@@ -28,3 +28,10 @@ def loopback_only_networking(socket_enabled):
     pytest_socket.socket_allow_hosts(LOOPBACK, allow_unix_socket=True)
     yield
     pytest_socket.disable_socket(allow_unix_socket=True)
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(enable_custom_integrations):
+    """Let Home Assistant load this repo's integration during tests."""
+
+    yield

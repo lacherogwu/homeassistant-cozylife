@@ -147,9 +147,10 @@ def test_delivery_to_zero_subscribers_fails_fast_with_a_clear_message():
     the device is offline, or registered on a different relay port. Waiting
     out the full timeout hides a misconfiguration that this names outright."""
 
-    with FakeLineServer(relay({"1": 1}, subscribers=0)) as server:
-        with pytest.raises(TransportError, match="no subscriber"):
-            make_transport(server).query()
+    with FakeLineServer(relay({"1": 1}, subscribers=0)) as server, pytest.raises(
+        TransportError, match="no subscriber"
+    ):
+        make_transport(server).query()
 
 
 def test_a_report_for_another_device_is_ignored():

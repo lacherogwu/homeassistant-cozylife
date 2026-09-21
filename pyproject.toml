@@ -1,0 +1,15 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "PYI", "RUF"]
+ignore = [
+  # Long lines are left to the author's judgement; the formatter is not run
+  # over this repo and reflowing prose comments hurts more than it helps.
+  "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately reach into internals and build throwaway objects.
+"tests/*" = ["B008"]

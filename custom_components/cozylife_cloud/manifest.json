@@ -1,0 +1,13 @@
+{
+  "domain": "cozylife_cloud",
+  "name": "CozyLife Cloud Fallback",
+  "codeowners": ["@lacherogwu"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/lacherogwu/homeassistant-cozylife-cloud",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/lacherogwu/homeassistant-cozylife-cloud/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

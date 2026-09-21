@@ -1,0 +1,6 @@
+# Development and test tooling. The integration itself has no runtime
+# dependencies beyond Home Assistant -- see custom_components/cozylife_cloud/
+# manifest.json, whose "requirements" list is deliberately empty.
+pytest
+pytest-homeassistant-custom-component
+ruff
