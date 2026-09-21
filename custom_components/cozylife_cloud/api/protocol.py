@@ -16,15 +16,13 @@ import json
 import time
 from typing import Any
 
+from .wire import TERMINATOR
+
 CMD_INFO = 0
 CMD_QUERY = 2
 CMD_SET = 3
 
-#: Sent by the device as an unsolicited state report, not in reply to anything.
-CMD_REPORT = 10
-
 PROTOCOL_VERSION = 0
-TERMINATOR = b"\r\n"
 
 #: ``attr: [0]`` is the device's "everything you have" wildcard.
 ATTR_ALL = 0

@@ -1,3 +1,10 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# Belt and braces alongside tests/conftest.py: no test may open a socket to
+# anything but this machine. See WRITE_SAFETY.md.
+addopts = "--allow-hosts=127.0.0.1,::1"
+
 [tool.ruff]
 target-version = "py313"
 line-length = 88

@@ -53,7 +53,6 @@ class StubClient:
         self.broken = broken
         self.accepts = accepts
         self.active_path = path
-        self.has_cloud_fallback = True
         self.local_circuit_open = False
         self.controls = []
         self.closed = False

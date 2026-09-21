@@ -83,10 +83,6 @@ class FallbackClient:
         return self._active_path
 
     @property
-    def has_cloud_fallback(self) -> bool:
-        return self._cloud is not None
-
-    @property
     def local_circuit_open(self) -> bool:
         """Whether local is currently being skipped."""
 

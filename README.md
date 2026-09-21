@@ -161,7 +161,6 @@ in `brand/`, and those take priority over the brands CDN.
 
 The mark is CozyLife's own. It is their trademark, used here only to
 identify the devices this integration talks to.
-`scripts/make_brand_assets.py` regenerates the set.
 
 ## Development
 
