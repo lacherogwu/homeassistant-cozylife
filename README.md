@@ -217,4 +217,8 @@ app. It is undocumented and unsupported, and may change without notice.
 
 ## Licence
 
-[MIT](LICENSE). The CozyLife name and mark are not covered by it.
+[MIT](LICENSE).
+
+The CozyLife name, and the mark in `custom_components/cozylife_cloud/brand/`,
+are trademarks of their owner. They are not covered by the MIT licence and
+are used here only to identify the devices this software talks to.
