@@ -7,6 +7,7 @@ WRITE_SAFETY.md for why that rule is absolute for the write path.
 
 from __future__ import annotations
 
+import contextlib
 import socket
 import threading
 from collections.abc import Callable
@@ -209,10 +210,8 @@ class FakeUdpResponder:
                 continue
             self.received.append(data)
             for reply in self._replies:
-                try:
+                with contextlib.suppress(OSError):
                     self._socket.sendto(reply, addr)
-                except OSError:
-                    pass
 
     def close(self) -> None:
         self._stop.set()

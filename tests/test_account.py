@@ -134,7 +134,7 @@ def test_a_wrong_password_raises_a_recognisable_auth_error():
 def test_an_unknown_account_raises_a_recognisable_auth_error():
     body = {"ret": "2006", "desc": "user not exist"}
     with FakeHttpServer({LOGIN_PATH: body}) as server, pytest.raises(
-        AuthError, match="[Nn]o account"
+        AuthError, match=r"[Nn]o account"
     ):
         account(server).login("nobody@example.com", "hunter2")
 

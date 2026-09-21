@@ -121,7 +121,7 @@ def test_a_dead_listener_at_an_unchanged_address_is_not_retried():
 def test_a_device_that_answers_nothing_raises_the_original_error():
     transport, _, _ = build("192.0.2.5", reachable_at="10.0.0.1", found_at=None)
 
-    with pytest.raises(TransportError, match="192.0.2.5"):
+    with pytest.raises(TransportError, match=r"192\.0\.2\.5"):
         transport.query()
 
 

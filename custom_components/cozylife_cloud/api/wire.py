@@ -7,6 +7,7 @@ JSON frames directly, the cloud relay carries them inside its own
 
 from __future__ import annotations
 
+import contextlib
 import socket
 import time
 from collections.abc import Iterator
@@ -77,10 +78,8 @@ class LineSocket:
         return f"{host}:{port}"
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(OSError):
             self._sock.close()
-        except OSError:
-            pass
 
     def __enter__(self) -> Self:
         return self
