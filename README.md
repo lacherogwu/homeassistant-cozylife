@@ -34,6 +34,9 @@ This integration uses both.
   `cloud`, so you can see which path is carrying traffic. Failover is meant
   to be invisible, which is exactly what makes a permanently broken local
   path easy to miss.
+- **Metering sensors** on sockets that measure: power, voltage, current and
+  cumulative energy. The energy sensor feeds Home Assistant's energy
+  dashboard.
 
 A **circuit breaker** is what makes local-first affordable. Once the
 listener dies it stays dead for days, so without one every poll and every
@@ -49,7 +52,7 @@ down to ~0.72 s — pure cloud latency.
 entity per device, controlling datapoint 1.
 
 You can add a CozyLife *bulb*, but you will get an on/off switch with no
-brightness or colour control. If you only have lights, use
+brightness or colour control, and no sensors. If you only have lights, use
 [`polaralias/homeassistant-cozylife`](https://github.com/polaralias/homeassistant-cozylife)
 instead — it has proper light support, just no cloud fallback.
 

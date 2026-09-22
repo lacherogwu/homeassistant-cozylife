@@ -38,7 +38,7 @@ from .const import (
 )
 from .coordinator import CozyLifeCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH]
 
 type CozyLifeConfigEntry = ConfigEntry[CozyLifeCoordinator]
 
